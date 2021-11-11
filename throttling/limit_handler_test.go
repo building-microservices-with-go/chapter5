@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func newTestHandler(ctx context.Context) http.Handler {
+func newTestHandler() http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusOK)
 		<-r.Context().Done()
@@ -26,7 +26,7 @@ func setup(ctx context.Context) (*httptest.ResponseRecorder, *http.Request) {
 
 func testCallsNextWhenConnectionsOK(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	handler := NewLimitHandler(2, newTestHandler(ctx))
+	handler := NewLimitHandler(2, newTestHandler())
 	rw, r := setup(ctx)
 
 	go handler.ServeHTTP(rw, r)
@@ -38,7 +38,7 @@ func testCallsNextWhenConnectionsOK(t *testing.T) {
 
 func TestReturnsBusyWhen0Connections(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	handler := NewLimitHandler(0, newTestHandler(ctx))
+	handler := NewLimitHandler(0, newTestHandler())
 	rw, r := setup(ctx)
 
 	time.AfterFunc(10*time.Millisecond, func() {
@@ -52,7 +52,7 @@ func TestReturnsBusyWhen0Connections(t *testing.T) {
 func TestReturnsOKWith2ConnnectionsAndConnectionLimit2(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx2, cancel2 := context.WithCancel(context.Background())
-	handler := NewLimitHandler(2, newTestHandler(ctx))
+	handler := NewLimitHandler(2, newTestHandler())
 	rw, r := setup(ctx)
 	rw2, r2 := setup(ctx2)
 
@@ -84,7 +84,7 @@ func TestReturnsOKWith2ConnnectionsAndConnectionLimit2(t *testing.T) {
 func TestReturnsBusyWhenConnectionsExhausted(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx2, cancel2 := context.WithCancel(context.Background())
-	handler := NewLimitHandler(1, newTestHandler(ctx))
+	handler := NewLimitHandler(1, newTestHandler())
 	rw, r := setup(ctx)
 	rw2, r2 := setup(ctx2)
 
@@ -116,7 +116,7 @@ func TestReturnsBusyWhenConnectionsExhausted(t *testing.T) {
 func TestReleasesConnectionLockWhenFinished(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx2, cancel2 := context.WithCancel(context.Background())
-	handler := NewLimitHandler(1, newTestHandler(ctx))
+	handler := NewLimitHandler(1, newTestHandler())
 	rw, r := setup(ctx)
 	rw2, r2 := setup(ctx2)
 
@@ -124,11 +124,10 @@ func TestReleasesConnectionLockWhenFinished(t *testing.T) {
 	cancel2()
 
 	waitGroup := sync.WaitGroup{}
-	waitGroup.Add(2)
+	waitGroup.Add(1)
 
 	go func() {
 		handler.ServeHTTP(rw, r)
-		waitGroup.Done()
 		handler.ServeHTTP(rw2, r2)
 		waitGroup.Done()
 	}()
@@ -136,6 +135,6 @@ func TestReleasesConnectionLockWhenFinished(t *testing.T) {
 	waitGroup.Wait()
 
 	if rw.Code != http.StatusOK || rw2.Code != http.StatusOK {
-		t.Fatalf("One request should have been busy, request 1: %v, request 2: %v", rw.Code, rw2.Code)
+		t.Fatalf("Both requests should be OK, request 1: %v, request 2: %v", rw.Code, rw2.Code)
 	}
 }
